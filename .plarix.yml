@@ -1,0 +1,6 @@
+assumptions:
+  requests_per_day: 10000
+  avg_input_tokens: 800
+  avg_output_tokens: 400
+  provider: "openai"
+  model: "gpt-4o-mini"

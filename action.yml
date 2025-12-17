@@ -1,0 +1,29 @@
+name: "plarix-action"
+description: "Estimate LLM cost impact for PRs (OpenAI + Anthropic) using repo-bundled pricing"
+inputs:
+  version:
+    description: "Release tag to download (e.g., v0.1.0). Defaults to the action tag."
+    required: false
+    default: "v0"
+  github_token:
+    description: "GitHub token with read access to the PR; optional if inheriting GITHUB_TOKEN."
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Download plarix binary
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="${{ inputs.version }}"
+        url="https://github.com/plarix-dev/plarix-action/releases/download/${version}/plarix-linux-amd64"
+        echo "Downloading $url"
+        curl -sSfL "$url" -o "$RUNNER_TEMP/plarix"
+        chmod +x "$RUNNER_TEMP/plarix"
+    - name: Run plarix
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token || github.token }}
+      run: |
+        set -euo pipefail
+        "$RUNNER_TEMP/plarix"
