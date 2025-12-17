@@ -53,7 +53,7 @@ The action runs automatically and:
 <!-- plarix-action -->
 
 ### LLM cost check
-Pricing: 2024-12-17 (sources: https://openai.com/pricing, https://www.anthropic.com/pricing)
+Pricing: 2025-12-17 (sources: https://openai.com/pricing, https://www.anthropic.com/pricing)
 
 Assumptions: 10000 req/day | 800 in tokens | 400 out tokens | openai/gpt-4o-mini
 
