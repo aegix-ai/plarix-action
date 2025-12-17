@@ -6,6 +6,10 @@ branding:
   color: "green"
 
 inputs:
+  version:
+    description: "Release tag to download (defaults to the action ref, e.g. v0.2.0)"
+    required: false
+    default: ""
   github_token:
     description: "Token with permission to read PR files and optionally comment (defaults to github.token)"
     required: false
@@ -18,13 +22,45 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        repo="${{ github.action_repository }}"
-        ref="${{ github.action_ref }}"
-        url="https://github.com/${repo}/releases/download/${ref}/plarix_Linux_x86_64.tar.gz"
-        echo "Downloading ${url}"
-        curl -sSfL "${url}" -o "${RUNNER_TEMP}/plarix.tar.gz"
-        tar -xzf "${RUNNER_TEMP}/plarix.tar.gz" -C "${RUNNER_TEMP}"
-        chmod +x "${RUNNER_TEMP}/plarix"
+        repo="${GITHUB_ACTION_REPOSITORY:-aegix-ai/plarix-action}"
+
+        version="${{ inputs.version }}"
+        if [ -z "$version" ]; then
+          version="${GITHUB_ACTION_REF:-}"
+        fi
+        if [ -z "$version" ]; then
+          echo "plarix-action: cannot determine action version; set inputs.version (e.g. v0.2.0)" >&2
+          exit 1
+        fi
+
+        tmp="${RUNNER_TEMP}"
+
+        urls=(
+          "https://github.com/${repo}/releases/download/${version}/plarix_Linux_x86_64.tar.gz"
+          "https://github.com/${repo}/releases/download/${version}/plarix-linux-amd64"
+          "https://github.com/${repo}/releases/latest/download/plarix_Linux_x86_64.tar.gz"
+          "https://github.com/${repo}/releases/latest/download/plarix-linux-amd64"
+        )
+
+        downloaded=""
+        for url in "${urls[@]}"; do
+          echo "Downloading ${url}"
+          if curl -fsSL "${url}" -o "${tmp}/plarix.download"; then
+            downloaded="${url}"
+            break
+          fi
+        done
+        if [ -z "$downloaded" ]; then
+          echo "plarix-action: failed to download release asset from ${repo} (${version})" >&2
+          exit 1
+        fi
+
+        if tar -xzf "${tmp}/plarix.download" -C "${tmp}" >/dev/null 2>&1; then
+          chmod +x "${tmp}/plarix"
+        else
+          mv "${tmp}/plarix.download" "${tmp}/plarix"
+          chmod +x "${tmp}/plarix"
+        fi
     - name: Run plarix
       shell: bash
       env:
