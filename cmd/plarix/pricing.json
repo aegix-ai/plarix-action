@@ -1,0 +1,105 @@
+{
+  "last_updated": "2025-12-17",
+  "models": [
+    {
+      "input_per_million": 2.5,
+      "name": "gpt-4o",
+      "output_per_million": 10,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 0.15,
+      "name": "gpt-4o-mini",
+      "output_per_million": 0.6,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 10,
+      "name": "gpt-4-turbo",
+      "output_per_million": 30,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 0.5,
+      "name": "gpt-3.5-turbo",
+      "output_per_million": 1.5,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 15,
+      "name": "o1",
+      "output_per_million": 60,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 1.1,
+      "name": "o1-mini",
+      "output_per_million": 4.4,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 2,
+      "name": "o3",
+      "output_per_million": 8,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 1.1,
+      "name": "o3-mini",
+      "output_per_million": 4.4,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 1.1,
+      "name": "o4-mini",
+      "output_per_million": 4.4,
+      "provider": "openai"
+    },
+    {
+      "input_per_million": 3,
+      "name": "claude-sonnet-4",
+      "output_per_million": 15,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 3,
+      "name": "claude-3-5-sonnet",
+      "output_per_million": 15,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 3,
+      "name": "claude-3-5-sonnet-latest",
+      "output_per_million": 15,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 1,
+      "name": "claude-haiku-4",
+      "output_per_million": 5,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 1,
+      "name": "claude-3-5-haiku",
+      "output_per_million": 5,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 5,
+      "name": "claude-opus-4",
+      "output_per_million": 25,
+      "provider": "anthropic"
+    },
+    {
+      "input_per_million": 15,
+      "name": "claude-3-opus",
+      "output_per_million": 75,
+      "provider": "anthropic"
+    }
+  ],
+  "sources": [
+    "https://platform.openai.com/docs/pricing",
+    "https://claude.com/platform/api"
+  ]
+}

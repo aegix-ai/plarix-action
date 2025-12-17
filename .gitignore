@@ -1,5 +1,6 @@
-# Binaries
-plarix
+# Binaries (repo root)
+/plarix
+/plarix.exe
 *.tar.gz
 
 # IDE
