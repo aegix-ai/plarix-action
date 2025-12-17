@@ -6,7 +6,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -79,6 +78,13 @@ type ghEvent struct {
 	PullRequest struct {
 		Number int `json:"number"`
 	} `json:"pull_request"`
+	Issue struct {
+		Number      int `json:"number"`
+		PullRequest *struct {
+			URL string `json:"url"`
+		} `json:"pull_request"`
+	} `json:"issue"`
+	Number int `json:"number"` // workflow_dispatch with inputs
 }
 
 type costPair struct {
@@ -115,6 +121,10 @@ func main() {
 	prNumber, err := readPRNumber(eventPath)
 	if err != nil {
 		fatalf("cannot read PR number: %v", err)
+	}
+	if prNumber == 0 {
+		fmt.Println("plarix: not a pull request context, skipping analysis")
+		return
 	}
 
 	client := newGHClient(token)
@@ -230,10 +240,34 @@ func readPRNumber(eventPath string) (int, error) {
 	if err := json.Unmarshal(data, &ev); err != nil {
 		return 0, err
 	}
-	if ev.PullRequest.Number == 0 {
-		return 0, errors.New("pull_request.number missing")
+
+	// 1. pull_request event (most common)
+	if ev.PullRequest.Number != 0 {
+		return ev.PullRequest.Number, nil
 	}
-	return ev.PullRequest.Number, nil
+
+	// 2. issue_comment event on a PR (comment triggers like /plarix)
+	if ev.Issue.Number != 0 && ev.Issue.PullRequest != nil {
+		return ev.Issue.Number, nil
+	}
+
+	// 3. workflow_dispatch with explicit number input
+	if ev.Number != 0 {
+		return ev.Number, nil
+	}
+
+	// 4. Check GITHUB_REF for pull request refs (refs/pull/123/merge)
+	if ref := os.Getenv("GITHUB_REF"); strings.HasPrefix(ref, "refs/pull/") {
+		parts := strings.Split(ref, "/")
+		if len(parts) >= 3 {
+			if n, err := strconv.Atoi(parts[2]); err == nil && n > 0 {
+				return n, nil
+			}
+		}
+	}
+
+	// Not a PR context - return 0 to signal graceful skip
+	return 0, nil
 }
 
 func newGHClient(token string) *http.Client {
