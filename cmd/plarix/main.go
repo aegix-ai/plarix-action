@@ -4,22 +4,24 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
+//go:embed pricing.json
+var embeddedPricing []byte
+
 const (
 	configPath       = ".plarix.yml"
-	pricingFilename  = "pricing.json"
 	commentMarker    = "<!-- plarix-action -->"
 	defaultUserAgent = "plarix-action"
 )
@@ -92,13 +94,8 @@ type pricingHit struct {
 func main() {
 	ctx := context.Background()
 
-	workspace := os.Getenv("GITHUB_WORKSPACE")
-	if workspace == "" {
-		workspace = "."
-	}
-
-	cfg, cfgFound := loadConfig(filepath.Join(workspace, configPath))
-	pricing, _, err := findPricing()
+	cfg, cfgFound := loadConfig(configPath)
+	pricing, err := findPricing()
 	if err != nil {
 		fatalf("failed to load pricing: %v", err)
 	}
@@ -159,33 +156,12 @@ func main() {
 	}
 }
 
-func findPricing() (PricingFile, string, error) {
-	if p := strings.TrimSpace(os.Getenv("PLARIX_PRICING_PATH")); p != "" {
-		pricing, err := loadPricing(p)
-		return pricing, p, err
+func findPricing() (PricingFile, error) {
+	var p PricingFile
+	if err := json.Unmarshal(embeddedPricing, &p); err != nil {
+		return PricingFile{}, fmt.Errorf("failed to parse embedded pricing: %w", err)
 	}
-
-	actionPath := strings.TrimSpace(os.Getenv("PLARIX_ACTION_PATH"))
-	if actionPath == "" {
-		actionPath = strings.TrimSpace(os.Getenv("GITHUB_ACTION_PATH"))
-	}
-
-	exe, _ := os.Executable()
-	paths := []string{
-		filepath.Join(actionPath, pricingFilename),
-		filepath.Join(filepath.Dir(exe), pricingFilename),
-		pricingFilename,
-	}
-	for _, p := range paths {
-		if strings.TrimSpace(p) == "" || p == "." || p == string(filepath.Separator) {
-			continue
-		}
-		if _, err := os.Stat(p); err == nil {
-			pricing, err := loadPricing(p)
-			return pricing, p, err
-		}
-	}
-	return PricingFile{}, "", fmt.Errorf("pricing file not found; looked in %v (set PLARIX_ACTION_PATH or PLARIX_PRICING_PATH)", paths)
+	return p, nil
 }
 
 func loadConfig(path string) (Config, bool) {
@@ -243,18 +219,6 @@ func loadConfig(path string) (Config, bool) {
 		}
 	}
 	return cfg, true
-}
-
-func loadPricing(path string) (PricingFile, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return PricingFile{}, err
-	}
-	var p PricingFile
-	if err := json.Unmarshal(data, &p); err != nil {
-		return PricingFile{}, err
-	}
-	return p, nil
 }
 
 func readPRNumber(eventPath string) (int, error) {

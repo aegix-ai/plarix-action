@@ -89,11 +89,11 @@ Observed changes (diff-based heuristics):
 
 ## Pricing Data
 
-Pricing is embedded at compile time from `pricing.json`. Supported models:
+Pricing is embedded at compile time from `cmd/plarix/pricing.json` using Go's `//go:embed`. Supported models:
 
-**OpenAI:** gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, o1, o1-mini
+**OpenAI:** gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, o1, o1-mini, o3, o3-mini, o4-mini
 
-**Anthropic:** claude-3-5-sonnet, claude-3-5-sonnet-latest, claude-3-5-haiku, claude-3-opus
+**Anthropic:** claude-sonnet-4, claude-3-5-sonnet, claude-haiku-4, claude-3-5-haiku, claude-opus-4, claude-3-opus
 
 To update pricing after verifying official pages:
 ```bash
