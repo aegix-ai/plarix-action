@@ -92,8 +92,13 @@ type pricingHit struct {
 func main() {
 	ctx := context.Background()
 
-	cfg, cfgFound := loadConfig(configPath)
-	pricing, err := findPricing()
+	workspace := os.Getenv("GITHUB_WORKSPACE")
+	if workspace == "" {
+		workspace = "."
+	}
+
+	cfg, cfgFound := loadConfig(filepath.Join(workspace, configPath))
+	pricing, _, err := findPricing()
 	if err != nil {
 		fatalf("failed to load pricing: %v", err)
 	}
@@ -154,18 +159,33 @@ func main() {
 	}
 }
 
-func findPricing() (PricingFile, error) {
+func findPricing() (PricingFile, string, error) {
+	if p := strings.TrimSpace(os.Getenv("PLARIX_PRICING_PATH")); p != "" {
+		pricing, err := loadPricing(p)
+		return pricing, p, err
+	}
+
+	actionPath := strings.TrimSpace(os.Getenv("PLARIX_ACTION_PATH"))
+	if actionPath == "" {
+		actionPath = strings.TrimSpace(os.Getenv("GITHUB_ACTION_PATH"))
+	}
+
 	exe, _ := os.Executable()
 	paths := []string{
+		filepath.Join(actionPath, pricingFilename),
 		filepath.Join(filepath.Dir(exe), pricingFilename),
 		pricingFilename,
 	}
 	for _, p := range paths {
+		if strings.TrimSpace(p) == "" || p == "." || p == string(filepath.Separator) {
+			continue
+		}
 		if _, err := os.Stat(p); err == nil {
-			return loadPricing(p)
+			pricing, err := loadPricing(p)
+			return pricing, p, err
 		}
 	}
-	return PricingFile{}, fmt.Errorf("pricing file not found; looked in %v", paths)
+	return PricingFile{}, "", fmt.Errorf("pricing file not found; looked in %v (set PLARIX_ACTION_PATH or PLARIX_PRICING_PATH)", paths)
 }
 
 func loadConfig(path string) (Config, bool) {

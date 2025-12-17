@@ -2,7 +2,7 @@ name: plarix
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -15,4 +15,4 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: LLM cost estimate
-        uses: aegix-ai/plarix-action@v0
+        uses: plarix-dev/plarix-action@v0

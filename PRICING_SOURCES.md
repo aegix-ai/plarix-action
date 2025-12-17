@@ -4,8 +4,8 @@ Official pricing pages for LLM providers:
 
 | Provider | URL | Last Verified |
 |----------|-----|---------------|
-| OpenAI | https://openai.com/pricing | 2024-12-17 |
-| Anthropic | https://www.anthropic.com/pricing | 2024-12-17 |
+| OpenAI | https://openai.com/pricing | 2025-12-17 |
+| Anthropic | https://www.anthropic.com/pricing | 2025-12-17 |
 
 ## Update Process
 
