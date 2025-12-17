@@ -12,3 +12,5 @@ plarix
 
 # Go
 .gocache/
+.gomodcache/
+.gopath/
