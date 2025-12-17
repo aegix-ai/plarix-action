@@ -1,0 +1,166 @@
+# Plarix Measured Mode Example
+#
+# This workflow demonstrates "measured mode" - the most accurate way to track
+# LLM costs by using actual token usage from your CI tests.
+#
+# How it works:
+# 1. Checkout the BASE commit (target branch)
+# 2. Run your test suite that produces a usage log (JSONL format)
+# 3. Checkout the HEAD commit (PR branch)
+# 4. Run the same test suite
+# 5. Plarix compares actual token usage between BASE and HEAD
+#
+# Your test suite must output JSONL with this format:
+# {"provider":"openai","model":"gpt-4o","input_tokens":1500,"output_tokens":500}
+# {"provider":"anthropic","model":"claude-sonnet-4","input_tokens":2000,"output_tokens":800}
+
+name: LLM Cost Analysis (Measured)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  measure-costs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout BASE (target branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        # Add your language/runtime setup here
+        # Example for Python:
+        # uses: actions/setup-python@v5
+        # with:
+        #   python-version: '3.12'
+        run: echo "Setting up environment..."
+
+      - name: Install dependencies (BASE)
+        run: |
+          # Install your project dependencies
+          # Example: pip install -r requirements.txt
+          echo "Installing dependencies..."
+
+      - name: Run tests and measure BASE usage
+        run: |
+          # Run your test suite that produces LLM usage logs
+          # The test must output JSONL to a file
+          #
+          # Example for a Python project:
+          # python -m pytest tests/ --llm-usage-log=base_usage.jsonl
+          #
+          # Or run your custom measurement script:
+          # ./scripts/measure-llm-usage.sh > base_usage.jsonl
+
+          # For this example, we create a placeholder
+          echo '{"provider":"openai","model":"gpt-4o","input_tokens":1000,"output_tokens":200}' > base_usage.jsonl
+          echo '{"provider":"anthropic","model":"claude-sonnet-4","input_tokens":500,"output_tokens":100}' >> base_usage.jsonl
+
+      - name: Save BASE usage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-usage
+          path: base_usage.jsonl
+          retention-days: 1
+
+      - name: Checkout HEAD (PR branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          clean: false
+
+      - name: Install dependencies (HEAD)
+        run: |
+          # Reinstall in case dependencies changed
+          echo "Installing dependencies..."
+
+      - name: Run tests and measure HEAD usage
+        run: |
+          # Same test suite as BASE
+          # Example:
+          # python -m pytest tests/ --llm-usage-log=head_usage.jsonl
+
+          # For this example, we create a placeholder with different values
+          echo '{"provider":"openai","model":"gpt-4o","input_tokens":1200,"output_tokens":250}' > head_usage.jsonl
+          echo '{"provider":"anthropic","model":"claude-sonnet-4","input_tokens":600,"output_tokens":120}' >> head_usage.jsonl
+
+      - name: Download BASE usage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: base-usage
+          path: .
+
+      - name: Run Plarix (Measured Mode)
+        uses: aegix-ai/plarix-action@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          PLARIX_MEASURE_BASE: base_usage.jsonl
+          PLARIX_MEASURE_HEAD: head_usage.jsonl
+
+# =============================================================================
+# JSONL Format Reference
+# =============================================================================
+#
+# Each line in your usage log should be valid JSON with these fields:
+#
+# Required fields:
+#   - provider: "openai" or "anthropic"
+#   - model: Model identifier (e.g., "gpt-4o", "claude-sonnet-4")
+#   - input_tokens: Number of input/prompt tokens
+#   - output_tokens: Number of output/completion tokens
+#
+# Optional fields:
+#   - cached_input_tokens: Tokens served from cache (Anthropic prompt caching)
+#   - timestamp: ISO 8601 timestamp of the API call
+#
+# Example lines:
+# {"provider":"openai","model":"gpt-4o","input_tokens":1500,"output_tokens":500}
+# {"provider":"anthropic","model":"claude-sonnet-4","input_tokens":2000,"output_tokens":800,"cached_input_tokens":500}
+# {"provider":"openai","model":"o1","input_tokens":3000,"output_tokens":1000,"timestamp":"2025-01-15T10:30:00Z"}
+#
+# =============================================================================
+# Generating Usage Logs
+# =============================================================================
+#
+# Option 1: Wrap your LLM client
+#   Create a wrapper around your OpenAI/Anthropic client that logs each call
+#
+# Option 2: Use a proxy
+#   Route API calls through a logging proxy that captures usage
+#
+# Option 3: Parse API responses
+#   Most LLM APIs return token usage in the response - log that data
+#
+# Example Python wrapper:
+#
+#   import json
+#   from openai import OpenAI
+#
+#   def log_usage(provider, model, input_tokens, output_tokens, log_file="usage.jsonl"):
+#       with open(log_file, "a") as f:
+#           f.write(json.dumps({
+#               "provider": provider,
+#               "model": model,
+#               "input_tokens": input_tokens,
+#               "output_tokens": output_tokens
+#           }) + "\n")
+#
+#   client = OpenAI()
+#   response = client.chat.completions.create(
+#       model="gpt-4o",
+#       messages=[{"role": "user", "content": "Hello!"}]
+#   )
+#   log_usage(
+#       "openai",
+#       response.model,
+#       response.usage.prompt_tokens,
+#       response.usage.completion_tokens
+#   )

@@ -1,14 +1,24 @@
 # plarix-action
 
-Minimal GitHub Action that estimates LLM cost impact on Pull Requests. Scans diffs for model changes, `max_tokens`, and retry counts, then posts a short Markdown report.
+**Honest** LLM cost analysis for Pull Requests. No fake numbers, no misleading defaults.
 
-**No AI calls, no backend, no telemetry** — just a tiny Go binary reading patches.
+Plarix analyzes your PR's actual impact on LLM costs using **real data** — either measured token usage from your CI tests or configured estimates from your `.plarix.yml`.
+
+**No AI calls, no backend, no telemetry** — just a tiny Go binary that tells the truth.
+
+## Why Plarix?
+
+Most cost estimation tools show impressive-looking numbers based on arbitrary defaults. Plarix refuses to do that.
+
+- **No data → No fake numbers.** Without configuration or measured usage, Plarix only reports diff heuristics.
+- **Measured mode → Real costs.** Connect your CI tests to show actual token usage changes.
+- **Clear data sources.** Every number is labeled with where it came from.
 
 ## Quick Start
 
-### 1. Add the workflow
+### Basic Usage (Heuristics Only)
 
-Create `.github/workflows/plarix.yml` in your repository:
+Without configuration, Plarix scans your PR diff for LLM-related changes:
 
 ```yaml
 name: plarix
@@ -26,89 +36,124 @@ jobs:
       - uses: aegix-ai/plarix-action@v0
 ```
 
-### 2. (Optional) Add configuration
+Output (heuristic mode):
+```
+### LLM cost check
+ℹ️ Data source: HEURISTIC_ONLY — no .plarix.yml or measured usage found
 
-Create `.plarix.yml` in your repository root to customize assumptions:
+Observed changes (diff-based heuristics):
+- Model change: gpt-4o → gpt-4o-mini
+- max_tokens change: 4096 → 2048
+
+💡 To see cost estimates, add a .plarix.yml config file.
+💡 For real measured costs, see: examples/plarix-measured.yml
+```
+
+### Configured Estimates
+
+Add `.plarix.yml` to your repository for estimated costs:
 
 ```yaml
 assumptions:
   requests_per_day: 10000
   avg_input_tokens: 800
   avg_output_tokens: 400
-  provider: "openai"      # or "anthropic"
-  model: "gpt-4o-mini"    # your default model
+  provider: "openai"
+  model: "gpt-4o-mini"
 ```
 
-If missing, defaults above are used and noted in the report.
-
-### 3. Open a PR
-
-The action runs automatically and:
-- Posts a comment on the PR (updates the same comment on new commits)
-- Writes to the GitHub Actions job summary
-
-## Example Output
-
+Output (configured estimate mode):
 ```
-<!-- plarix-action -->
-
 ### LLM cost check
-Pricing: 2025-12-17 (sources: https://platform.openai.com/docs/pricing, https://claude.com/platform/api)
+ℹ️ Data source: CONFIGURED_ESTIMATE — from .plarix.yml assumptions
 
-Assumptions: 10000 req/day | 800 in tokens | 400 out tokens | openai/gpt-4o-mini
+**Before** = model detected in removed lines (or .plarix.yml default)
+**After** = model detected in added lines (or .plarix.yml default)
 
 | | Model | Est. per request | Est. monthly |
 |---|---|---|---|
 | Before | gpt-4o | $0.0028 | $840.00 |
-| After  | gpt-4o-mini | $0.0004 | $108.00 |
+| After | gpt-4o-mini | $0.0004 | $108.00 |
 
-Monthly spend trend:
-Before |====================== $840.00
-After  |==...                  $108.00
-
-Observed changes (diff-based heuristics):
-- Models: gpt-4o -> gpt-4o-mini
-- max_tokens: 4096 -> 2048
+📐 Formula: (requests_per_day × 30) × (input_tokens × input_price + output_tokens × output_price)
 ```
 
-## What It Does
+### 🌟 Measured Mode (Recommended)
 
-- **Reads diffs** via GitHub API to find LLM-related changes
-- **Detects** model name changes (`gpt-4o`, `claude-3-5-sonnet`, etc.)
-- **Detects** `max_tokens` and retry count changes
-- **Computes** cost estimates using bundled pricing data
-- **Reports** BEFORE → AFTER comparison with ASCII trend bars
+The most accurate way: measure actual token usage from your CI tests.
 
-## What It Does NOT Do
+Set these environment variables:
+- `PLARIX_MEASURE_BASE` — Path to JSONL file with BASE commit token usage
+- `PLARIX_MEASURE_HEAD` — Path to JSONL file with HEAD commit token usage
 
-- No AI/LLM calls
-- No network calls for pricing (bundled in binary)
-- No code execution from PR contents
-- No telemetry or tracking
-- No external services or databases
+See [`examples/plarix-measured.yml`](examples/plarix-measured.yml) for a complete workflow.
 
-## Pricing Data
+Output (measured mode):
+```
+### LLM cost check
+ℹ️ Data source: MEASURED — from CI test token usage logs
 
-Pricing is embedded at compile time from `cmd/plarix/pricing.json` using Go's `//go:embed`. Supported models:
+**Before** = measured from BASE commit test run
+**After** = measured from HEAD commit test run
+
+| Provider/Model | Before Tokens | After Tokens | Before Cost | After Cost | Δ Cost |
+|---|---|---|---|---|---|
+| openai/gpt-4o | 1,500 in / 500 out | 1,800 in / 600 out | $0.0113 | $0.0135 | +$0.0023 |
+| anthropic/claude-sonnet-4 | 2,000 in / 800 out | 1,800 in / 700 out | $0.0180 | $0.0159 | -$0.0021 |
+
+**Total:** Before $0.0293 → After $0.0294 (Δ +$0.0001)
+```
+
+## JSONL Format
+
+For measured mode, your test suite must output JSONL with one API call per line:
+
+```json
+{"provider":"openai","model":"gpt-4o","input_tokens":1500,"output_tokens":500}
+{"provider":"anthropic","model":"claude-sonnet-4","input_tokens":2000,"output_tokens":800,"cached_input_tokens":500}
+```
+
+Required fields:
+- `provider` — `"openai"` or `"anthropic"`
+- `model` — Model identifier (e.g., `"gpt-4o"`, `"claude-sonnet-4"`)
+- `input_tokens` — Number of input/prompt tokens
+- `output_tokens` — Number of output/completion tokens
+
+Optional fields:
+- `cached_input_tokens` — Tokens served from cache (Anthropic prompt caching)
+- `timestamp` — ISO 8601 timestamp
+
+## Data Source Labels
+
+Plarix always tells you where numbers come from:
+
+| Label | Meaning |
+|-------|---------|
+| `MEASURED` | Real token counts from your CI test runs |
+| `CONFIGURED_ESTIMATE` | Estimates based on `.plarix.yml` assumptions |
+| `HEURISTIC_ONLY` | Only diff analysis, no cost numbers |
+
+## What It Detects
+
+From PR diffs (heuristic analysis):
+- Model name changes (`gpt-4o` → `gpt-4o-mini`)
+- `max_tokens` parameter changes
+- Retry count changes
+
+## Supported Models
 
 **OpenAI:** gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, o1, o1-mini, o3, o3-mini, o4-mini
 
 **Anthropic:** claude-sonnet-4, claude-3-5-sonnet, claude-haiku-4, claude-3-5-haiku, claude-opus-4, claude-3-opus
 
-To update pricing after verifying official pages:
-```bash
-# Edit prices in cmd/update-pricing/main.go, then:
-make update-pricing
-```
-
-Sources: [OpenAI Pricing](https://platform.openai.com/docs/pricing) | [Anthropic Pricing](https://claude.com/platform/api)
+Pricing sources: [OpenAI](https://platform.openai.com/docs/pricing) | [Anthropic](https://www.anthropic.com/pricing)
 
 ## Security
 
-- **Read-only diff analysis** — no code execution
-- **GitHub token** used only for REST API calls (PR files, comments)
-- **No outbound calls** except GitHub API
-- **No secrets required** beyond the default `GITHUB_TOKEN`
+- **Read-only** — No code execution from PR contents
+- **No external calls** — Pricing embedded at compile time
+- **Minimal permissions** — Only needs `pull-requests: write` for comments
+- **No telemetry** — Nothing leaves your Actions runner
 
 ## Development
 
@@ -116,38 +161,11 @@ Sources: [OpenAI Pricing](https://platform.openai.com/docs/pricing) | [Anthropic
 # Build
 go build -o plarix ./cmd/plarix
 
+# Run tests
+go test ./...
+
 # Update pricing (after editing cmd/update-pricing/main.go)
 make update-pricing
-
-# Test locally (requires GitHub env vars)
-GITHUB_TOKEN=xxx GITHUB_EVENT_PATH=event.json GITHUB_REPOSITORY=owner/repo ./plarix
-```
-
-## Release
-
-### For Users
-Pin to a major version tag for stability:
-```yaml
-uses: aegix-ai/plarix-action@v0
-```
-
-### For Maintainers
-Since this action is published to GitHub Marketplace, there are no workflow files in this repo.
-See `examples/release.yml` for the build process, or build manually:
-
-```bash
-GOOS=linux GOARCH=amd64 go build -o plarix ./cmd/plarix
-tar -czf plarix_Linux_x86_64.tar.gz plarix
-# Upload plarix_Linux_x86_64.tar.gz to GitHub Release
-```
-
-Then tag and release:
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-# Update moving tag:
-git tag -fa v0 -m "Update v0 to v0.1.0"
-git push origin v0 --force
 ```
 
 ## License
