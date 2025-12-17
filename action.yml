@@ -1,13 +1,13 @@
-name: "plarix-action"
-description: "Estimate LLM cost impact for PRs (OpenAI + Anthropic) using repo-bundled pricing"
+name: "Plarix LLM cost"
+description: "Estimate PR LLM cost impact and post a summary"
+author: "aegix-ai"
+
 inputs:
-  version:
-    description: "Release tag to download (e.g., v0.1.0). Defaults to the action tag."
-    required: false
-    default: "v0"
   github_token:
-    description: "GitHub token with read access to the PR; optional if inheriting GITHUB_TOKEN."
+    description: "Token with permission to comment on PRs (defaults to GITHUB_TOKEN)"
     required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -15,15 +15,24 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        version="${{ inputs.version }}"
-        url="https://github.com/plarix-dev/plarix-action/releases/download/${version}/plarix-linux-amd64"
-        echo "Downloading $url"
-        curl -sSfL "$url" -o "$RUNNER_TEMP/plarix"
-        chmod +x "$RUNNER_TEMP/plarix"
+        REPO="${{ github.action_repository }}"
+        if [ -z "$REPO" ]; then
+          REPO="aegix-ai/plarix-action"
+        fi
+        curl -sSL "https://github.com/${REPO}/releases/latest/download/plarix_Linux_x86_64.tar.gz" -o /tmp/plarix.tar.gz
+        tar -xzf /tmp/plarix.tar.gz -C /tmp
+        chmod +x /tmp/plarix
     - name: Run plarix
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github_token || github.token }}
+        INPUT_TOKEN: ${{ inputs.github_token }}
+        FALLBACK_TOKEN: ${{ github.token }}
+        GITHUB_WORKSPACE: ${{ github.workspace }}
       run: |
         set -euo pipefail
-        "$RUNNER_TEMP/plarix"
+        if [ -n "$INPUT_TOKEN" ]; then
+          export GITHUB_TOKEN="$INPUT_TOKEN"
+        else
+          export GITHUB_TOKEN="$FALLBACK_TOKEN"
+        fi
+        /tmp/plarix

@@ -1,83 +1,132 @@
 # plarix-action
 
-Minimal GitHub Action that estimates LLM spend impact for Pull Requests (OpenAI + Anthropic) using a bundled pricing table. No external services, no telemetry, no dashboards -- just a tiny Go binary that reads PR diffs.
+Minimal GitHub Action that estimates LLM cost impact on Pull Requests. Scans diffs for model changes, `max_tokens`, and retry counts, then posts a short Markdown report.
 
-## 60-second install
+**No AI calls, no backend, no telemetry** — just a tiny Go binary reading patches.
 
-1. Copy `.github/workflows/plarix.yml` into your repo (uses `plarix-dev/plarix-action@v0`).
-2. Optional: drop a `.plarix.yml` with your usage assumptions (requests per day, token sizes, provider/model).
-3. Push -- the action comments on PRs (if `pull-requests: write` permission) and writes to the job summary.
+## Quick Start
 
-## What you get
+### 1. Add the workflow
 
-- Per-request and monthly spend estimate using the chosen model + assumptions.
-- Diff-aware signals: model strings, `max_tokens`, and retry counts pulled from PR patches.
-- ASCII monthly spend bars and a compact before/after table.
-- Bundled pricing (`pricing.json`) with explicit sources (`PRICING_SOURCES.md`); no runtime network fetch.
-- If nothing relevant changed, the report says so and still shows the current estimate.
+Create `.github/workflows/plarix.yml` in your repository:
 
-Example output:
+```yaml
+name: plarix
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  llm-cost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aegix-ai/plarix-action@v0
+```
 
-````markdown
-<!-- plarix-action -->
+### 2. (Optional) Add configuration
 
-### LLM cost check
-Pricing: 2024-08-20 (sources: https://openai.com/pricing, https://www.anthropic.com/pricing)
-
-Assumptions: 10000 req/day | 800 in tokens | 400 out tokens | openai/gpt-4o-mini
-
-| | Model | Est. per request | Est. monthly |
-|---|---|---|---|
-| Before | gpt-4o-mini | $0.0004 | $108.00 |
-| After  | gpt-4o      | $0.0100 | $3000.00 |
-
-Monthly spend trend:
-Before |=..................... $108.00
-After  |====================== $3000.00
-
-Observed changes (diff-based heuristics):
-- Models: gpt-4o-mini -> gpt-4o
-- max_tokens: - -> 2048
-`````
-
-## Configuration (`.plarix.yml`)
-
-If absent, defaults are used and noted in the report.
+Create `.plarix.yml` in your repository root to customize assumptions:
 
 ```yaml
 assumptions:
   requests_per_day: 10000
   avg_input_tokens: 800
   avg_output_tokens: 400
-  provider: "openai"   # or "anthropic"
-  model: "gpt-4o-mini" # or "claude-3-5-sonnet-latest"
+  provider: "openai"      # or "anthropic"
+  model: "gpt-4o-mini"    # your default model
 ```
 
-## Pricing data
+If missing, defaults above are used and noted in the report.
 
-- `pricing.json` holds the bundled table and `last_updated` date.
-- `PRICING_SOURCES.md` links to the official pricing pages and records the last checked date.
-- Update script: `make update-pricing` (runs `go run ./cmd/update-pricing` and rewrites `pricing.json`). Adjust the hardcoded table in `cmd/update-pricing/main.go` if prices change.
+### 3. Open a PR
 
-The action never fetches pricing over the network at runtime.
+The action runs automatically and:
+- Posts a comment on the PR (updates the same comment on new commits)
+- Writes to the GitHub Actions job summary
 
-## How it works
+## Example Output
 
-1. Downloads the published linux-amd64 binary from GitHub Releases (see `action.yml`).
-2. Reads GitHub context (`GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, `GITHUB_TOKEN`), lists PR files, and scans patches with regexes for model names, `max_tokens`, and retry counts.
-3. Computes before/after estimates using the assumptions + bundled pricing, then:
-   - Writes to the GitHub job summary.
-   - Updates or creates a PR comment marked with `<!-- plarix-action -->` (skips silently if the token lacks permission).
+```
+<!-- plarix-action -->
 
-## Security notes
+### LLM cost check
+Pricing: 2024-12-17 (sources: https://openai.com/pricing, https://www.anthropic.com/pricing)
 
-- No outbound calls beyond the GitHub API for the PR diff.
-- Pricing is read from the repo; no runtime scraping or third-party services.
-- No code execution of PR contents; only text scanning of patches.
-- Uses only the Go standard library at runtime.
+Assumptions: 10000 req/day | 800 in tokens | 400 out tokens | openai/gpt-4o-mini
 
-## Limits and scope
+| | Model | Est. per request | Est. monthly |
+|---|---|---|---|
+| Before | gpt-4o | $0.0028 | $840.00 |
+| After  | gpt-4o-mini | $0.0004 | $108.00 |
 
-- Heuristics are intentionally simple and may miss complex config changes.
-- Unknown models fall back to the closest provider entry and are flagged in the report.
-- Only linux-amd64 binaries are published by default; extend the release workflow if you need more.
+Monthly spend trend:
+Before |====================== $840.00
+After  |==...                  $108.00
+
+Observed changes (diff-based heuristics):
+- Models: gpt-4o -> gpt-4o-mini
+- max_tokens: 4096 -> 2048
+```
+
+## What It Does
+
+- **Reads diffs** via GitHub API to find LLM-related changes
+- **Detects** model name changes (`gpt-4o`, `claude-3-5-sonnet`, etc.)
+- **Detects** `max_tokens` and retry count changes
+- **Computes** cost estimates using bundled pricing data
+- **Reports** BEFORE → AFTER comparison with ASCII trend bars
+
+## What It Does NOT Do
+
+- No AI/LLM calls
+- No network calls for pricing (bundled in binary)
+- No code execution from PR contents
+- No telemetry or tracking
+- No external services or databases
+
+## Pricing Data
+
+Pricing is embedded at compile time from `pricing.json`. Supported models:
+
+**OpenAI:** gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, o1, o1-mini
+
+**Anthropic:** claude-3-5-sonnet, claude-3-5-sonnet-latest, claude-3-5-haiku, claude-3-opus
+
+To update pricing after verifying official pages:
+```bash
+# Edit prices in cmd/update-pricing/main.go, then:
+make update-pricing
+```
+
+Sources: [OpenAI Pricing](https://openai.com/pricing) | [Anthropic Pricing](https://www.anthropic.com/pricing)
+
+## Security
+
+- **Read-only diff analysis** — no code execution
+- **GitHub token** used only for REST API calls (PR files, comments)
+- **No outbound calls** except GitHub API
+- **No secrets required** beyond the default `GITHUB_TOKEN`
+
+## Development
+
+```bash
+# Build
+go build -o plarix ./cmd/plarix
+
+# Update pricing (after editing cmd/update-pricing/main.go)
+make update-pricing
+
+# Test locally (requires GitHub env vars)
+GITHUB_TOKEN=xxx GITHUB_EVENT_PATH=event.json GITHUB_REPOSITORY=owner/repo ./plarix
+```
+
+## Release
+
+Tag with `vX.Y.Z` to trigger the release workflow, which builds and uploads `plarix_Linux_x86_64.tar.gz`.
+
+## License
+
+MIT — see [LICENSE](LICENSE)

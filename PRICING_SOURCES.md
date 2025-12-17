@@ -1,6 +1,16 @@
-# Pricing sources
+# Pricing Sources
 
-- OpenAI pricing: https://openai.com/pricing (last checked: 2024-08-20)
-- Anthropic pricing: https://www.anthropic.com/pricing (last checked: 2024-08-20)
+Official pricing pages for LLM providers:
 
-`pricing.json` should be regenerated via `make update-pricing` (or `go run ./cmd/update-pricing`) after verifying these pages.
+| Provider | URL | Last Verified |
+|----------|-----|---------------|
+| OpenAI | https://openai.com/pricing | 2024-12-17 |
+| Anthropic | https://www.anthropic.com/pricing | 2024-12-17 |
+
+## Update Process
+
+1. Visit the official pricing pages above
+2. Update the prices in `cmd/update-pricing/main.go`
+3. Run `make update-pricing`
+4. Update the "Last Verified" dates in this file
+5. Commit all changes

@@ -19,7 +19,7 @@ import (
 
 const (
 	configPath       = ".plarix.yml"
-	pricingPath      = "pricing.json"
+	pricingFilename  = "pricing.json"
 	commentMarker    = "<!-- plarix-action -->"
 	defaultUserAgent = "plarix-action"
 )
@@ -79,11 +79,21 @@ type ghEvent struct {
 	} `json:"pull_request"`
 }
 
+type costPair struct {
+	PerRequest float64
+	Monthly    float64
+}
+
+type pricingHit struct {
+	BeforeFound bool
+	AfterFound  bool
+}
+
 func main() {
 	ctx := context.Background()
 
 	cfg, cfgFound := loadConfig(configPath)
-	pricing, err := loadPricing(pricingPath)
+	pricing, err := findPricing()
 	if err != nil {
 		fatalf("failed to load pricing: %v", err)
 	}
@@ -94,15 +104,15 @@ func main() {
 	if eventPath == "" {
 		fatalf("GITHUB_EVENT_PATH is empty")
 	}
+	if repo == "" {
+		fatalf("GITHUB_REPOSITORY is empty")
+	}
 	if token == "" {
-		fatalf("GITHUB_TOKEN is empty; required to read PR diffs")
+		fatalf("GITHUB_TOKEN is required to read PR diffs")
 	}
 	prNumber, err := readPRNumber(eventPath)
 	if err != nil {
 		fatalf("cannot read PR number: %v", err)
-	}
-	if repo == "" {
-		fatalf("GITHUB_REPOSITORY is empty")
 	}
 
 	client := newGHClient(token)
@@ -142,6 +152,20 @@ func main() {
 			fmt.Fprintf(os.Stderr, "warn: failed to update PR comment: %v\n", err)
 		}
 	}
+}
+
+func findPricing() (PricingFile, error) {
+	exe, _ := os.Executable()
+	paths := []string{
+		filepath.Join(filepath.Dir(exe), pricingFilename),
+		pricingFilename,
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return loadPricing(p)
+		}
+	}
+	return PricingFile{}, fmt.Errorf("pricing file not found; looked in %v", paths)
 }
 
 func loadConfig(path string) (Config, bool) {
@@ -279,7 +303,7 @@ func fetchPRFiles(ctx context.Context, client *http.Client, repo string, prNumbe
 var (
 	modelPattern     = regexp.MustCompile(`(?i)\b(gpt-[\w.-]+|claude-[\w.-]+)\b`)
 	maxTokensPattern = regexp.MustCompile(`(?i)max[_-]?tokens\s*[:=]\s*([0-9]+)`)
-	retryPattern     = regexp.MustCompile(`(?i)(retries|maxRetries|retry\s*count|retry_limit)\s*[:=]\s*([0-9]+)`) // limited heuristics
+	retryPattern     = regexp.MustCompile(`(?i)(retries|maxRetries|retry\s*count|retry_limit)\s*[:=]\s*([0-9]+)`)
 )
 
 func extractSignals(files []ghFile) DiffSignals {
@@ -294,18 +318,23 @@ func extractSignals(files []ghFile) DiffSignals {
 			if strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") || strings.HasPrefix(line, "@@") {
 				continue
 			}
-			target := &s.AfterModels
-			targetMax := &s.AfterMax
-			targetRetry := &s.AfterRetry
+			var targetModels *[]string
+			var targetMax *[]int
+			var targetRetry *[]int
 			if strings.HasPrefix(line, "-") {
-				target = &s.BeforeModels
+				targetModels = &s.BeforeModels
 				targetMax = &s.BeforeMax
 				targetRetry = &s.BeforeRetry
-			} else if !strings.HasPrefix(line, "+") {
+			} else if strings.HasPrefix(line, "+") {
+				targetModels = &s.AfterModels
+				targetMax = &s.AfterMax
+				targetRetry = &s.AfterRetry
+			} else {
 				continue
 			}
+
 			for _, m := range modelPattern.FindAllString(line, -1) {
-				*target = append(*target, m)
+				*targetModels = append(*targetModels, m)
 			}
 			for _, m := range maxTokensPattern.FindAllStringSubmatch(line, -1) {
 				if v, err := strconv.Atoi(m[1]); err == nil {
@@ -331,23 +360,10 @@ func computeEstimate(a Assumptions, pricing PricingFile, model string) (costPair
 
 func priceFor(pricing PricingFile, provider, model string) (ModelPrice, bool) {
 	provider = strings.ToLower(provider)
-	model = strings.ToLower(model)
-	found := false
-	var fallback ModelPrice
 	for _, m := range pricing.Models {
 		if strings.EqualFold(m.Provider, provider) && strings.EqualFold(m.Name, model) {
 			return m, true
 		}
-		if !found && strings.EqualFold(m.Provider, provider) {
-			fallback = m
-			found = true
-		}
-	}
-	if found {
-		return fallback, false
-	}
-	if len(pricing.Models) > 0 {
-		return pricing.Models[0], false
 	}
 	return ModelPrice{Provider: provider, Name: model}, false
 }
@@ -364,16 +380,6 @@ type reportInput struct {
 	PricingHits pricingHit
 }
 
-type costPair struct {
-	PerRequest float64
-	Monthly    float64
-}
-
-type pricingHit struct {
-	BeforeFound bool
-	AfterFound  bool
-}
-
 func buildReport(in reportInput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", commentMarker)
@@ -384,17 +390,12 @@ func buildReport(in reportInput) string {
 
 	fmt.Fprintf(&b, "Pricing: %s (sources: %s)\n\n", safeValue(in.Pricing.LastUpdated, "unknown"), strings.Join(in.Pricing.Sources, ", "))
 
-	fmt.Fprintf(&b, "Assumptions: %d req/day | %d in tokens | %d out tokens | %s/%s\n\n", in.Config.RequestsPerDay, in.Config.AvgInputTokens, in.Config.AvgOutputTokens, in.Config.Provider, in.AfterModel)
+	fmt.Fprintf(&b, "Assumptions: %d req/day · %d in tokens · %d out tokens · %s/%s\n\n", in.Config.RequestsPerDay, in.Config.AvgInputTokens, in.Config.AvgOutputTokens, in.Config.Provider, in.AfterModel)
 
 	fmt.Fprintf(&b, "| | Model | Est. per request | Est. monthly |\n")
 	fmt.Fprintf(&b, "|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| Before | %s | $%.4f | $%.2f |\n", in.BeforeModel, in.BeforeCost.PerRequest, in.BeforeCost.Monthly)
 	fmt.Fprintf(&b, "| After  | %s | $%.4f | $%.2f |\n\n", in.AfterModel, in.AfterCost.PerRequest, in.AfterCost.Monthly)
-
-	if !in.PricingHits.BeforeFound || !in.PricingHits.AfterFound {
-		missing := uniqueStrings(filterMissing(in))
-		fmt.Fprintf(&b, "_Note: pricing entry missing for %s; values may be undercounted. Update pricing.json._\n\n", strings.Join(missing, ", "))
-	}
 
 	maxMonthly := in.AfterCost.Monthly
 	if in.BeforeCost.Monthly > maxMonthly {
@@ -414,13 +415,17 @@ func buildReport(in reportInput) string {
 
 	fmt.Fprintf(&b, "Observed changes (diff-based heuristics):\n")
 	if len(in.Signals.BeforeModels) > 0 || len(in.Signals.AfterModels) > 0 {
-		fmt.Fprintf(&b, "- Models: %s -> %s\n", listOrPlaceholder(in.Signals.BeforeModels), listOrPlaceholder(in.Signals.AfterModels))
+		fmt.Fprintf(&b, "- Models: %s → %s\n", listOrPlaceholder(in.Signals.BeforeModels), listOrPlaceholder(in.Signals.AfterModels))
 	}
 	if len(in.Signals.BeforeMax) > 0 || len(in.Signals.AfterMax) > 0 {
-		fmt.Fprintf(&b, "- max_tokens: %s -> %s\n", intsOrDash(in.Signals.BeforeMax), intsOrDash(in.Signals.AfterMax))
+		fmt.Fprintf(&b, "- max_tokens: %s → %s\n", intsOrDash(in.Signals.BeforeMax), intsOrDash(in.Signals.AfterMax))
 	}
 	if len(in.Signals.BeforeRetry) > 0 || len(in.Signals.AfterRetry) > 0 {
-		fmt.Fprintf(&b, "- retries: %s -> %s\n", intsOrDash(in.Signals.BeforeRetry), intsOrDash(in.Signals.AfterRetry))
+		fmt.Fprintf(&b, "- retries: %s → %s\n", intsOrDash(in.Signals.BeforeRetry), intsOrDash(in.Signals.AfterRetry))
+	}
+
+	if !in.PricingHits.BeforeFound || !in.PricingHits.AfterFound {
+		fmt.Fprintf(&b, "_Note: pricing entry missing for one or more models; costs may read as $0.00._\n")
 	}
 
 	return b.String()
@@ -435,19 +440,19 @@ func bar(value, max float64) string {
 	if filled > width {
 		filled = width
 	}
-	return strings.Repeat("=", filled) + strings.Repeat(".", width-filled)
+	return strings.Repeat("█", filled) + strings.Repeat("·", width-filled)
 }
 
 func listOrPlaceholder(values []string) string {
 	if len(values) == 0 {
-		return "-"
+		return "—"
 	}
 	return strings.Join(uniqueStrings(values), ", ")
 }
 
 func intsOrDash(values []int) string {
 	if len(values) == 0 {
-		return "-"
+		return "—"
 	}
 	parts := make([]string, 0, len(values))
 	for _, v := range uniqueInts(values) {
@@ -464,17 +469,6 @@ func uniqueStrings(in []string) []string {
 			seen[v] = true
 			out = append(out, v)
 		}
-	}
-	return out
-}
-
-func filterMissing(in reportInput) []string {
-	var out []string
-	if !in.PricingHits.BeforeFound {
-		out = append(out, in.BeforeModel)
-	}
-	if !in.PricingHits.AfterFound {
-		out = append(out, in.AfterModel)
 	}
 	return out
 }

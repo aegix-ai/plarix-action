@@ -2,7 +2,7 @@ name: plarix
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -15,7 +15,4 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: LLM cost estimate
-        uses: plarix-dev/plarix-action@v0
-        with:
-          version: v0
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        uses: aegix-ai/plarix-action@v0

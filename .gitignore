@@ -1,0 +1,14 @@
+# Binaries
+plarix
+*.tar.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Go
+.gocache/

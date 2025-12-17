@@ -7,49 +7,48 @@ import (
 	"time"
 )
 
-type PricingFile struct {
-	LastUpdated string       `json:"last_updated"`
-	Sources     []string     `json:"sources"`
-	Models      []ModelPrice `json:"models"`
-}
-
-type ModelPrice struct {
-	Provider         string  `json:"provider"`
-	Name             string  `json:"name"`
-	InputPerMillion  float64 `json:"input_per_million"`
-	OutputPerMillion float64 `json:"output_per_million"`
-}
-
+// This tool rewrites pricing.json from the table below.
+// After updating prices from official sources, run: go run ./cmd/update-pricing
 func main() {
-	models := []ModelPrice{
-		{Provider: "openai", Name: "gpt-4o", InputPerMillion: 5.00, OutputPerMillion: 15.00},
-		{Provider: "openai", Name: "gpt-4o-mini", InputPerMillion: 0.15, OutputPerMillion: 0.60},
-		{Provider: "openai", Name: "gpt-3.5-turbo", InputPerMillion: 0.50, OutputPerMillion: 1.50},
-		{Provider: "anthropic", Name: "claude-3-5-sonnet", InputPerMillion: 3.00, OutputPerMillion: 15.00},
-		{Provider: "anthropic", Name: "claude-3-5-sonnet-latest", InputPerMillion: 3.00, OutputPerMillion: 15.00},
-		{Provider: "anthropic", Name: "claude-3-opus", InputPerMillion: 15.00, OutputPerMillion: 75.00},
-	}
-
-	pricing := PricingFile{
-		LastUpdated: time.Now().Format("2006-01-02"),
-		Sources: []string{
+	pricing := map[string]any{
+		"last_updated": time.Now().Format("2006-01-02"),
+		"sources": []string{
 			"https://openai.com/pricing",
 			"https://www.anthropic.com/pricing",
 		},
-		Models: models,
+		"models": []map[string]any{
+			// OpenAI models (as of Dec 2024)
+			{"provider": "openai", "name": "gpt-4o", "input_per_million": 2.50, "output_per_million": 10.0},
+			{"provider": "openai", "name": "gpt-4o-mini", "input_per_million": 0.15, "output_per_million": 0.60},
+			{"provider": "openai", "name": "gpt-4-turbo", "input_per_million": 10.0, "output_per_million": 30.0},
+			{"provider": "openai", "name": "gpt-3.5-turbo", "input_per_million": 0.50, "output_per_million": 1.50},
+			{"provider": "openai", "name": "o1", "input_per_million": 15.0, "output_per_million": 60.0},
+			{"provider": "openai", "name": "o1-mini", "input_per_million": 3.0, "output_per_million": 12.0},
+			// Anthropic models (as of Dec 2024)
+			{"provider": "anthropic", "name": "claude-3-5-sonnet", "input_per_million": 3.0, "output_per_million": 15.0},
+			{"provider": "anthropic", "name": "claude-3-5-sonnet-latest", "input_per_million": 3.0, "output_per_million": 15.0},
+			{"provider": "anthropic", "name": "claude-3-5-haiku", "input_per_million": 0.80, "output_per_million": 4.0},
+			{"provider": "anthropic", "name": "claude-3-opus", "input_per_million": 15.0, "output_per_million": 75.0},
+		},
 	}
 
-	buf, err := json.MarshalIndent(pricing, "", "  ")
+	data, err := json.MarshalIndent(pricing, "", "  ")
 	if err != nil {
-		fail(err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-	if err := os.WriteFile("pricing.json", buf, 0o644); err != nil {
-		fail(err)
-	}
-	fmt.Printf("pricing.json updated with %d models (last_updated=%s)\n", len(models), pricing.LastUpdated)
-}
 
-func fail(err error) {
-	fmt.Fprintf(os.Stderr, "update-pricing: %v\n", err)
-	os.Exit(1)
+	// Write to root pricing.json
+	if err := os.WriteFile("pricing.json", data, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing pricing.json: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Also copy to cmd/plarix for embedding
+	if err := os.WriteFile("cmd/plarix/pricing.json", data, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing cmd/plarix/pricing.json: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Updated pricing.json and cmd/plarix/pricing.json")
 }
