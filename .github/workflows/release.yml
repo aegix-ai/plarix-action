@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build linux-amd64
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOOS=linux GOARCH=amd64 go build -o plarix ./cmd/plarix
+          cp plarix plarix-linux-amd64
+          tar -czf plarix_Linux_x86_64.tar.gz plarix
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            plarix_Linux_x86_64.tar.gz
+            plarix-linux-amd64
