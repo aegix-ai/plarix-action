@@ -22,15 +22,28 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        repo="${GITHUB_ACTION_REPOSITORY:-aegix-ai/plarix-action}"
+        action_path="${GITHUB_ACTION_PATH:-}"
+        repo="${GITHUB_ACTION_REPOSITORY:-}"
+        if [ -z "$repo" ] && [ -n "$action_path" ]; then
+          # Expected shape: .../_actions/<owner>/<repo>/<ref>
+          parent="$(dirname "$action_path")"
+          repo_name="$(basename "$parent")"
+          owner="$(basename "$(dirname "$parent")")"
+          if [ -n "$owner" ] && [ -n "$repo_name" ]; then
+            repo="${owner}/${repo_name}"
+          fi
+        fi
+        repo="${repo:-aegix-ai/plarix-action}"
 
         version="${{ inputs.version }}"
         if [ -z "$version" ]; then
           version="${GITHUB_ACTION_REF:-}"
         fi
+        if [ -z "$version" ] && [ -n "$action_path" ]; then
+          version="$(basename "$action_path")"
+        fi
         if [ -z "$version" ]; then
-          echo "plarix-action: cannot determine action version; set inputs.version (e.g. v0.2.0)" >&2
-          exit 1
+          version="v0"
         fi
 
         tmp="${RUNNER_TEMP}"
