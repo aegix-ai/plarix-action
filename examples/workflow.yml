@@ -1,0 +1,23 @@
+# Example: User workflow
+#
+# Copy this file to your repository as `.github/workflows/plarix.yml`
+# to enable LLM cost estimation on pull requests.
+
+name: plarix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  llm-cost:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: LLM cost estimate
+        uses: aegix-ai/plarix-action@v0

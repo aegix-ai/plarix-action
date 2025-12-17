@@ -1,5 +1,9 @@
-name: "plarix-action"
-description: "Estimate PR LLM cost impact (OpenAI + Anthropic) using bundled pricing"
+name: "Plarix - LLM Cost Estimator"
+description: "Estimate PR LLM cost impact (OpenAI + Anthropic) using bundled pricing. No AI calls, no telemetry."
+author: "aegix-ai"
+branding:
+  icon: "dollar-sign"
+  color: "green"
 
 inputs:
   github_token:

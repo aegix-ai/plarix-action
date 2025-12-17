@@ -53,7 +53,7 @@ The action runs automatically and:
 <!-- plarix-action -->
 
 ### LLM cost check
-Pricing: 2024-12-17 (sources: https://openai.com/pricing, https://www.anthropic.com/pricing)
+Pricing: 2025-12-17 (sources: https://platform.openai.com/docs/pricing, https://claude.com/platform/api)
 
 Assumptions: 10000 req/day | 800 in tokens | 400 out tokens | openai/gpt-4o-mini
 
@@ -101,7 +101,7 @@ To update pricing after verifying official pages:
 make update-pricing
 ```
 
-Sources: [OpenAI Pricing](https://openai.com/pricing) | [Anthropic Pricing](https://www.anthropic.com/pricing)
+Sources: [OpenAI Pricing](https://platform.openai.com/docs/pricing) | [Anthropic Pricing](https://claude.com/platform/api)
 
 ## Security
 
@@ -125,7 +125,30 @@ GITHUB_TOKEN=xxx GITHUB_EVENT_PATH=event.json GITHUB_REPOSITORY=owner/repo ./pla
 
 ## Release
 
-Tag with `vX.Y.Z` to trigger the release workflow, which builds and uploads `plarix_Linux_x86_64.tar.gz`.
+### For Users
+Pin to a major version tag for stability:
+```yaml
+uses: aegix-ai/plarix-action@v0
+```
+
+### For Maintainers
+Since this action is published to GitHub Marketplace, there are no workflow files in this repo.
+See `examples/release.yml` for the build process, or build manually:
+
+```bash
+GOOS=linux GOARCH=amd64 go build -o plarix ./cmd/plarix
+tar -czf plarix_Linux_x86_64.tar.gz plarix
+# Upload plarix_Linux_x86_64.tar.gz to GitHub Release
+```
+
+Then tag and release:
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+# Update moving tag:
+git tag -fa v0 -m "Update v0 to v0.1.0"
+git push origin v0 --force
+```
 
 ## License
 

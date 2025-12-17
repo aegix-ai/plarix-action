@@ -1,3 +1,13 @@
+# Example: Release workflow for plarix-action maintainers
+#
+# This workflow is NOT included in the action repo (Marketplace requirement).
+# Maintainers should run this in a separate CI repo or manually build releases.
+#
+# To build a release manually:
+#   GOOS=linux GOARCH=amd64 go build -o plarix ./cmd/plarix
+#   tar -czf plarix_Linux_x86_64.tar.gz plarix
+#   # Upload plarix_Linux_x86_64.tar.gz to GitHub Release
+
 name: release
 
 on:
